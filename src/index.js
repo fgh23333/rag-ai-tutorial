@@ -372,16 +372,18 @@ app.post("/rag", rateLimitMiddleware, async (c) => {
   **最终 Prompt:**  
   `,
 		temperature: 0.3, // 低温度，提高稳定性
+		max_tokens: 4096, // 限制最大输出长度
 	});
 
 	const finalPrompt = generatedPrompt.response;
 	console.log("✅ 生成的 Prompt:", finalPrompt);
 
 	// ✅ 调用目标模型，生成最终回答
-	const answer = await c.env.AI.run("@cf/google/gemma-2b-it-lora", {
+	const answer = await c.env.AI.run("@cf/google/gemma-3-12b-it", {
 		prompt: finalPrompt,
 		temperature: 0.7,
 		top_p: 0.9,
+		max_tokens: 16384, // 限制最大输出长度
 	});
 
 	// ✅ 缓存结果
@@ -390,6 +392,30 @@ app.post("/rag", rateLimitMiddleware, async (c) => {
 	await c.env.REQUEST_LOG_KV.put(logKey, JSON.stringify(logData));
 
 	return c.json(result);
+});
+
+app.post("/retrieve", async (c) => {
+	const { query } = await c.req.json();
+	if (!query) return c.json({ error: "❌ 缺少 query 参数" }, 400);
+
+	const embeddings = await c.env.AI.run("@cf/baai/bge-base-en-v1.5", { text: query });
+
+	const MIN_SIMILARITY_SCORE = 0.5;
+	const retrievedDocs = await c.env.VECTOR_INDEX.query(embeddings.data[0], { topK: 5, returnMetadata: "all" });
+
+	const highQualityDocs = retrievedDocs.matches.filter(doc => doc.score >= MIN_SIMILARITY_SCORE);
+
+	let sources = [];
+
+	if (highQualityDocs.length > 0) {
+		for (const doc of highQualityDocs) {
+			sources.push(`主题: ${doc.namespace}, 内容: ${doc.metadata.text}`);
+		}
+	} else {
+		sources = [];
+	}
+
+	return c.json({ sources });
 });
 
 app.post("/insert", async (c) => {
