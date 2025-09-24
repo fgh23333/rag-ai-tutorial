@@ -409,13 +409,16 @@ app.post("/retrieve", async (c) => {
 
 	if (highQualityDocs.length > 0) {
 		for (const doc of highQualityDocs) {
-			sources.push(`主题: ${doc.namespace}, 内容: ${doc.metadata.text}`);
+			sources.push(doc);
 		}
 	} else {
 		sources = [];
 	}
 
-	return c.json({ sources });
+	return c.json({
+		status: "success",
+		data: sources
+	});
 });
 
 app.post("/insert", async (c) => {
